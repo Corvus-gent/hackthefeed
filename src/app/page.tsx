@@ -4,9 +4,20 @@ import { useEffect, useState } from "react";
 import type { GenerateResponse } from "./api/generate/route";
 import { SAMPLE_COMPANY, SAMPLE_PRODUCT_IMAGE, SAMPLE_VIDEOS } from "@/lib/samples";
 
-type Result = GenerateResponse["results"][number] & { status?: string; videoUrl?: string | null };
+type Result = GenerateResponse["results"][number] & { status?: string; videoUrl?: string | null; retried?: boolean };
 
 const isPending = (r: Result) => r.requestId && !r.videoUrl && !r.error && !["failed", "cancelled"].includes(r.status ?? "");
+
+/** Veo's safety filter blocks some renders. Re-render those once on the fallback model. */
+async function retry(r: Result): Promise<Partial<Result>> {
+  const res = await fetch("/api/retry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: r.videoPrompt, imageUrl: r.imageUrl }),
+  });
+  const d: { requestId?: string; error?: string } = await res.json();
+  return d.requestId ? { requestId: d.requestId, status: "retrying", retried: true } : { error: d.error, retried: true };
+}
 
 export default function Home() {
   const [company, setCompany] = useState(SAMPLE_COMPANY);
@@ -35,7 +46,8 @@ export default function Home() {
       const updates = await Promise.all(
         pending.map(async (r) => {
           const d: { status: string; videoUrl?: string | null } = await fetch(`/api/status/${r.requestId}`).then((x) => x.json());
-          return [r.requestId, d] as const;
+          const failed = d.status === "failed" || d.status === "cancelled";
+          return [r.requestId, failed && !r.retried ? await retry(r) : d] as const;
         }),
       );
       const byId = new Map(updates);

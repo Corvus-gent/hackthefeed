@@ -16,6 +16,7 @@ export type GenerateResponse = {
     source: number;
     person: string;
     line: string;
+    videoPrompt: string;
     imageUrl?: string;
     requestId?: string;
     error?: string;
@@ -37,9 +38,9 @@ export async function POST(req: Request) {
     try {
       imageUrl = await generateImage(imagePrompt, refs);
       const job = await submitVideo(videoPrompt, imageUrl, model);
-      return { source, person, line, imageUrl, requestId: job.request_id };
+      return { source, person, line, videoPrompt, imageUrl, requestId: job.request_id };
     } catch (err) {
-      return { source, person, line, imageUrl, error: message(err) };
+      return { source, person, line, videoPrompt, imageUrl, error: message(err) };
     }
   };
 

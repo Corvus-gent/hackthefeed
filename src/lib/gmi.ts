@@ -8,7 +8,7 @@ const CHAT_URL = "https://api.gmi-serving.com/v1/chat/completions";
 export const VIDEO_MODEL = process.env.GMI_VIDEO_MODEL ?? "veo-3.1-lite-generate-001";
 const IMAGE_MODEL = "gemini-3.1-flash-image";
 const LLM_MODEL = process.env.GMI_LLM_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash";
-const FALLBACK_VIDEO_MODEL = "seedance-2-0-fast-260128";
+export const FALLBACK_VIDEO_MODEL = "seedance-2-0-fast-260128";
 
 // Talking-head capable models (native audio + lip sync). Price per second at 720p with audio.
 export const VIDEO_MODELS = [
