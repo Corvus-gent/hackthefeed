@@ -1,12 +1,22 @@
 import "server-only";
 import { z } from "zod";
 
-// GMI Cloud clients: request-queue (video) and OpenAI-compatible chat (LLM).
+// GMI Cloud clients: request queue (image + video) and OpenAI-compatible chat (LLM).
 const QUEUE_URL = "https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey";
 const CHAT_URL = "https://api.gmi-serving.com/v1/chat/completions";
 
 export const VIDEO_MODEL = process.env.GMI_VIDEO_MODEL ?? "veo-3.1-lite-generate-001";
+const IMAGE_MODEL = "gemini-3.1-flash-image";
 const LLM_MODEL = process.env.GMI_LLM_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash";
+const FALLBACK_VIDEO_MODEL = "seedance-2-0-fast-260128";
+
+// Talking-head capable models (native audio + lip sync). Price per second at 720p with audio.
+export const VIDEO_MODELS = [
+  "veo-3.1-lite-generate-001", // $0.05/s, best value
+  "seedance-2-0-fast-260128", // $0.12/s
+  "veo-3.1-fast-generate-001", // $0.15/s
+  "seedance-2-5-260628", // $0.23/s, highest fidelity
+] as const;
 
 function headers() {
   const key = process.env.GMI_API_KEY;
@@ -17,7 +27,7 @@ function headers() {
 async function gmiFetch<T extends z.ZodType>(url: string, schema: T, init?: RequestInit): Promise<z.infer<T>> {
   const res = await fetch(url, { ...init, headers: headers(), cache: "no-store" });
   const body: unknown = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(`GMI ${res.status}: ${JSON.stringify(body)}`);
+  if (!res.ok) throw new Error(`GMI ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return schema.parse(body);
 }
 
@@ -25,56 +35,82 @@ const RequestSchema = z.object({
   request_id: z.string(),
   status: z.string(),
   outcome: z
-    .object({ video_url: z.string().optional(), thumbnail_image_url: z.string().optional() })
-    .passthrough()
+    .object({
+      video_url: z.string().optional(),
+      media_urls: z.array(z.object({ url: z.string() })).optional(),
+    })
     .nullish(),
 });
-export type VideoRequest = z.infer<typeof RequestSchema>;
 
-// Talking-head capable models (native audio + lip sync). Price per second at 720p with audio.
-export const VIDEO_MODELS = [
-  "veo-3.1-lite-generate-001", // $0.05/s, best value
-  "seedance-2-0-fast-260128", // $0.12/s
-  "veo-3.1-fast-generate-001", // $0.15/s
-  "seedance-2-5-260628", // $0.23/s, highest fidelity
-] as const;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Payload keys differ per provider: Veo uses camelCase, Seedance snake_case.
-function videoPayload(model: string, prompt: string) {
-  if (model.startsWith("veo")) {
-    return { prompt, durationSeconds: 8, aspectRatio: "9:16", resolution: "720p", generateAudio: true, personGeneration: "allow_adult" };
-  }
-  return { prompt, duration: 8, ratio: "9:16", resolution: "720p", generate_audio: true, watermark: false };
-}
-
-const FALLBACK_MODEL = "seedance-2-0-fast-260128";
-
-/**
- * Queue a text-to-video job. Veo on GMI randomly 500s on submit, so retry a few times,
- * then fall back to Seedance. Poll with getVideo until "success".
- */
-export async function submitVideo(prompt: string, model = VIDEO_MODEL) {
-  const submit = (m: string) =>
-    gmiFetch(`${QUEUE_URL}/requests`, RequestSchema, {
-      method: "POST",
-      body: JSON.stringify({ model: m, payload: videoPayload(m, prompt) }),
-    });
-
-  const attempts = model === FALLBACK_MODEL ? [model, model, model] : [model, model, model, FALLBACK_MODEL];
+/** Submit a queue job. GMI randomly 500s on submit, so retry with backoff. */
+async function submit(model: string, payload: object, tries = 3) {
   let lastError: unknown;
-  for (const [i, m] of attempts.entries()) {
+  for (let i = 0; i < tries; i++) {
     try {
-      return await submit(m);
+      return await gmiFetch(`${QUEUE_URL}/requests`, RequestSchema, {
+        method: "POST",
+        body: JSON.stringify({ model, payload }),
+      });
     } catch (err) {
       lastError = err;
-      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      await sleep(1000 * (i + 1));
     }
   }
   throw lastError;
 }
 
-export function getVideo(id: string) {
+export function getJob(id: string) {
   return gmiFetch(`${QUEUE_URL}/requests/${encodeURIComponent(id)}`, RequestSchema);
+}
+
+/**
+ * Photoreal still of a person holding the product. `refs` are product photo URLs the
+ * model copies the packaging from. Waits for the job and returns a hosted image URL.
+ */
+export async function generateImage(prompt: string, refs: string[]) {
+  const job = await submit(IMAGE_MODEL, {
+    prompt,
+    ...(refs.length && { image: refs }),
+    aspect_ratio: "9:16",
+    image_size: "1K",
+    image_output_format: "jpeg",
+  });
+  for (let i = 0; i < 40; i++) {
+    const res = await getJob(job.request_id);
+    const url = res.outcome?.media_urls?.[0]?.url;
+    if (res.status === "success" && url) return url;
+    if (res.status === "failed" || res.status === "cancelled") throw new Error(`Image job ${res.status}`);
+    await sleep(3000);
+  }
+  throw new Error("Image job timed out");
+}
+
+// Payload keys differ per provider: Veo uses camelCase, Seedance snake_case.
+function videoPayload(model: string, prompt: string, image?: string) {
+  if (model.startsWith("veo")) {
+    return {
+      prompt,
+      ...(image && { image }),
+      durationSeconds: 8,
+      aspectRatio: "9:16",
+      resolution: "720p",
+      generateAudio: true,
+      personGeneration: "allow_adult",
+    };
+  }
+  return { prompt, ...(image && { first_frame: image }), duration: 8, ratio: "9:16", resolution: "720p", generate_audio: true, watermark: false };
+}
+
+/** Queue an image-to-video job, falling back to Seedance if the model keeps failing. Poll with getJob. */
+export async function submitVideo(prompt: string, image?: string, model = VIDEO_MODEL) {
+  try {
+    return await submit(model, videoPayload(model, prompt, image));
+  } catch (err) {
+    if (model === FALLBACK_VIDEO_MODEL) throw err;
+    return submit(FALLBACK_VIDEO_MODEL, videoPayload(FALLBACK_VIDEO_MODEL, prompt, image));
+  }
 }
 
 const ChatSchema = z.object({

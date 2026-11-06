@@ -2,26 +2,16 @@
 
 import { useEffect, useState } from "react";
 import type { GenerateResponse } from "./api/generate/route";
+import { SAMPLE_COMPANY, SAMPLE_PRODUCT_IMAGE, SAMPLE_VIDEOS } from "@/lib/samples";
 
 type Result = GenerateResponse["results"][number] & { status?: string; videoUrl?: string | null };
 
-const EXAMPLE_ORIANE = JSON.stringify(
-  {
-    url: "https://www.tiktok.com/@creator/video/123",
-    platform: "tiktok",
-    views: 2400000,
-    likes: 310000,
-    caption: "this changed my morning routine forever #productivity",
-    transcript: "Stop scrolling. If you wake up tired every day, you need to hear this...",
-    visual_tags: ["talking head", "bedroom", "morning light", "close-up"],
-  },
-  null,
-  2,
-);
+const isPending = (r: Result) => r.requestId && !r.videoUrl && !r.error && !["failed", "cancelled"].includes(r.status ?? "");
 
 export default function Home() {
-  const [company, setCompany] = useState("");
-  const [videos, setVideos] = useState([EXAMPLE_ORIANE]);
+  const [company, setCompany] = useState(SAMPLE_COMPANY);
+  const [productImage, setProductImage] = useState(SAMPLE_PRODUCT_IMAGE);
+  const [videos, setVideos] = useState(SAMPLE_VIDEOS);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
   const [results, setResults] = useState<Result[]>([]);
@@ -39,7 +29,7 @@ export default function Home() {
 
   // Poll every pending job until it succeeds or fails.
   useEffect(() => {
-    const pending = results.filter((r) => r.requestId && !r.videoUrl && !["failed", "cancelled"].includes(r.status ?? "") && !r.error);
+    const pending = results.filter(isPending);
     if (!pending.length) return;
     const t = setTimeout(async () => {
       const updates = await Promise.all(
@@ -62,7 +52,12 @@ export default function Home() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company, videos: videos.filter((v) => v.trim()), model }),
+        body: JSON.stringify({
+          company,
+          productImage: productImage.trim() || undefined,
+          videos: videos.filter((v) => v.trim()),
+          model,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -74,6 +69,8 @@ export default function Home() {
     }
   }
 
+  const count = videos.filter((v) => v.trim()).length * 2;
+
   return (
     <main className="mx-auto w-full max-w-5xl p-6 space-y-8">
       <h1 className="text-3xl font-semibold">HackTheFeed</h1>
@@ -81,11 +78,23 @@ export default function Home() {
       <section className="space-y-2">
         <label className="font-medium">Company</label>
         <textarea
-          className="w-full h-28 rounded border border-neutral-700 bg-transparent p-3 text-sm"
+          className="w-full h-36 rounded border border-neutral-700 bg-transparent p-3 text-sm"
           placeholder="Name, product, audience, tone..."
           value={company}
           onChange={(e) => setCompany(e.target.value)}
         />
+        <div className="flex items-center gap-3">
+          <input
+            className="w-full rounded border border-neutral-700 bg-transparent p-2 text-sm"
+            placeholder="Product photo URL"
+            value={productImage}
+            onChange={(e) => setProductImage(e.target.value)}
+          />
+          {productImage && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={productImage} alt="" className="h-12 w-12 rounded object-cover" />
+          )}
+        </div>
       </section>
 
       <section className="space-y-3">
@@ -103,11 +112,9 @@ export default function Home() {
               value={v}
               onChange={(e) => setVideos(videos.map((x, j) => (j === i ? e.target.value : x)))}
             />
-            {videos.length > 1 && (
-              <button className="text-sm" onClick={() => setVideos(videos.filter((_, j) => j !== i))}>
-                Remove
-              </button>
-            )}
+            <button className="text-sm" onClick={() => setVideos(videos.filter((_, j) => j !== i))}>
+              Remove
+            </button>
           </div>
         ))}
       </section>
@@ -122,10 +129,10 @@ export default function Home() {
         </select>
         <button
           className="rounded bg-white px-4 py-2 text-black disabled:opacity-50"
-          disabled={loading || !company.trim()}
+          disabled={loading || !company.trim() || !count}
           onClick={generate}
         >
-          {loading ? "Writing scripts..." : `Generate ${videos.filter((v) => v.trim()).length * 2} videos`}
+          {loading ? "Writing scripts and casting..." : `Generate ${count} videos`}
         </button>
       </div>
       {error && <p className="text-red-500 text-sm">{error}</p>}
@@ -133,18 +140,25 @@ export default function Home() {
       <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         {results.map((r, i) => (
           <div key={i} className="space-y-2">
-            {r.videoUrl ? (
-              <video src={r.videoUrl} controls playsInline className="aspect-[9/16] w-full rounded bg-black" />
-            ) : (
-              <div className="flex aspect-[9/16] w-full items-center justify-center rounded bg-neutral-900 text-sm text-neutral-400">
-                {r.error ? "Failed" : (r.status ?? "queued")}
-              </div>
-            )}
-            <p className="text-sm font-medium">
-              Video {r.source + 1}: {r.hook}
+            <div className="relative aspect-[9/16] w-full overflow-hidden rounded bg-neutral-900">
+              {r.videoUrl ? (
+                <video src={r.videoUrl} controls autoPlay loop playsInline className="h-full w-full object-cover" />
+              ) : (
+                <>
+                  {r.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={r.imageUrl} alt="" className="h-full w-full object-cover opacity-60" />
+                  )}
+                  <span className="absolute inset-x-0 bottom-3 text-center text-sm text-white">
+                    {r.error ? "Failed" : `Rendering video (${r.status ?? "queued"})`}
+                  </span>
+                </>
+              )}
+            </div>
+            <p className="text-sm">
+              Video {r.source + 1}: &ldquo;{r.line}&rdquo;
             </p>
-            <p className="text-sm">&ldquo;{r.script}&rdquo;</p>
-            <p className="text-xs text-neutral-500">{r.persona}</p>
+            <p className="text-xs text-neutral-500">{r.person}</p>
             {r.error && <p className="text-xs text-red-500 break-all">{r.error}</p>}
           </div>
         ))}

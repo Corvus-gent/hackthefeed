@@ -1,9 +1,12 @@
 import { z } from "zod";
-import { submitVideo, VIDEO_MODEL } from "@/lib/gmi";
-import { remix } from "@/lib/remix";
+import { generateImage, submitVideo, VIDEO_MODEL } from "@/lib/gmi";
+import { remix, type Variant } from "@/lib/remix";
+
+export const maxDuration = 300;
 
 const Body = z.object({
   company: z.string().min(1),
+  productImage: z.string().url().optional(),
   videos: z.array(z.string().min(1)).min(1).max(5),
   model: z.string().optional(),
 });
@@ -11,36 +14,46 @@ const Body = z.object({
 export type GenerateResponse = {
   results: {
     source: number;
-    persona: string;
-    hook: string;
-    script: string;
-    prompt: string;
+    person: string;
+    line: string;
+    imageUrl?: string;
     requestId?: string;
     error?: string;
   }[];
 };
 
-// POST: remix each Oriane video into 2 variants and queue them on GMI. Client polls /api/status/[id].
+/**
+ * POST: for each Oriane video write 2 scripts, render a photo of each person holding the
+ * product, then queue image-to-video on GMI. The client polls /api/status/[id].
+ */
 export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return Response.json({ error: parsed.error.message }, { status: 400 });
-  const { company, videos, model = VIDEO_MODEL } = parsed.data;
+  const { company, productImage, videos, model = VIDEO_MODEL } = parsed.data;
+  const refs = productImage ? [productImage] : [];
 
-  const perVideo = await Promise.all(
-    videos.map(async (video, source) => {
-      const variants = await remix(company, video, source);
-      return Promise.all(
-        variants.map(async (v) => {
-          try {
-            const job = await submitVideo(v.prompt, model);
-            return { source, ...v, requestId: job.request_id };
-          } catch (err) {
-            return { source, ...v, error: err instanceof Error ? err.message : String(err) };
-          }
-        }),
-      );
-    }),
-  );
+  const render = async (source: number, { person, line, imagePrompt, videoPrompt }: Variant) => {
+    let imageUrl: string | undefined;
+    try {
+      imageUrl = await generateImage(imagePrompt, refs);
+      const job = await submitVideo(videoPrompt, imageUrl, model);
+      return { source, person, line, imageUrl, requestId: job.request_id };
+    } catch (err) {
+      return { source, person, line, imageUrl, error: message(err) };
+    }
+  };
 
-  return Response.json({ results: perVideo.flat() } satisfies GenerateResponse);
+  try {
+    const perVideo = await Promise.all(
+      videos.map(async (video, source) => {
+        const variants = await remix(company, video, source);
+        return Promise.all(variants.map((v) => render(source, v)));
+      }),
+    );
+    return Response.json({ results: perVideo.flat() } satisfies GenerateResponse);
+  } catch (err) {
+    return Response.json({ error: `Script writing failed: ${message(err)}` }, { status: 502 });
+  }
 }
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
