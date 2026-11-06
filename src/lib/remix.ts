@@ -52,9 +52,10 @@ export async function remix(company: string, oriane: string, seed: number): Prom
     person: people[i],
     line: v.line,
     imagePrompt:
-      `Candid vertical iPhone front-camera selfie, frame from a TikTok video. ${people[i]}, wearing ${v.outfit}, ${v.setting}. ` +
+      `Candid vertical iPhone front-camera selfie photo, raw camera output. ${people[i]}, wearing ${v.outfit}, ${v.setting}. ` +
       `Holding the exact can from the reference image toward the camera, label facing camera and legible. ${v.expression}. ` +
-      "Natural available light, real skin texture, slightly imperfect framing, no studio lighting, no text overlays, no watermark.",
+      "Natural available light, real skin texture, slightly imperfect framing, no studio lighting. " +
+      "Clean full-bleed photo: no phone screen, no app interface, no status bar, no captions, no text overlays, no watermark.",
     videoPrompt:
       `Handheld iPhone selfie video, vertical. ${v.action} They look into the camera and say: "${v.line}" ` +
       "Natural lip sync, casual real voice, ambient sound only, no music, no subtitles, keep the can label unchanged.",
