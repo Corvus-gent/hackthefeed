@@ -47,14 +47,30 @@ function videoPayload(model: string, prompt: string) {
   return { prompt, duration: 8, ratio: "9:16", resolution: "720p", generate_audio: true, watermark: false };
 }
 
-/** Queue a text-to-video job, retrying once on GMI's transient 500s. Poll with getVideo until "success". */
+const FALLBACK_MODEL = "seedance-2-0-fast-260128";
+
+/**
+ * Queue a text-to-video job. Veo on GMI randomly 500s on submit, so retry a few times,
+ * then fall back to Seedance. Poll with getVideo until "success".
+ */
 export async function submitVideo(prompt: string, model = VIDEO_MODEL) {
-  const submit = () =>
+  const submit = (m: string) =>
     gmiFetch(`${QUEUE_URL}/requests`, RequestSchema, {
       method: "POST",
-      body: JSON.stringify({ model, payload: videoPayload(model, prompt) }),
+      body: JSON.stringify({ model: m, payload: videoPayload(m, prompt) }),
     });
-  return submit().catch(submit);
+
+  const attempts = model === FALLBACK_MODEL ? [model, model, model] : [model, model, model, FALLBACK_MODEL];
+  let lastError: unknown;
+  for (const [i, m] of attempts.entries()) {
+    try {
+      return await submit(m);
+    } catch (err) {
+      lastError = err;
+      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw lastError;
 }
 
 export function getVideo(id: string) {
