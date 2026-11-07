@@ -1,4 +1,4 @@
-import { competitorsFor, rankedVideos, toggle, type RankedVideo, type VideoView } from '@/lib/onboarding/state';
+import { competitorsFor, pickedVideos, rankedVideos, toggle, type RankedVideo, type VideoView } from '@/lib/onboarding/state';
 import type { StepProps } from '../Onboarding';
 import { Icon } from '../icons';
 import { btn, CheckCircle, cx, Reel, RemoteImage, Sparkline, Stat, Tag } from '../ui';
@@ -40,7 +40,7 @@ export default function VideosStep({ s, set }: StepProps) {
           ))}
         </Reel>
       )}
-      {s.videos.length > 0 && <p className="text-[13px] text-ink-3">{s.videos.length} picked · picks stay when you switch views</p>}
+      {pickedVideos(s).length > 0 && <p className="text-[13px] text-ink-3">{pickedVideos(s).length} picked · picks stay when you switch views</p>}
     </div>
   );
 }

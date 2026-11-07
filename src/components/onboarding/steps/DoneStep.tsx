@@ -44,7 +44,7 @@ export default function DoneStep({ s, toast }: StepProps) {
             )}
           </span>
           {i.done
-            ? <span aria-label="Done"><CheckCircle on /></span>
+            ? <span role="img" aria-label="Done"><CheckCircle on /></span>
             : <button type="button" onClick={() => toast(`Prototype ends here. In the app, “${i.cta}” opens that step.`)}
                 className="h-[34px] rounded-full bg-accent px-4 text-sm font-medium whitespace-nowrap text-white hover:brightness-110">{i.cta}</button>}
         </div>

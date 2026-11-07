@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { WILD_WONDER } from './data.ts';
-import { parseSite } from './site.ts';
+import { isPublicUrl, parseSite } from './site.ts';
 import {
   canContinue, competitorVideos, detectNiche, editLink, editSite, editWhat, finishSiteRead,
   initialState, parseHandle, rankedVideos, STEPS, validLink, withNiche, type State,
@@ -105,4 +105,34 @@ test('parseSite reads meta, socials and products from a Shopify-style page', () 
   assert.deepEqual(info.socials, { tiktok: '@sodaco', instagram: '@sodaco' });
   assert.deepEqual(info.products.map(p => p.title), ['Apple Yuzu', 'Pineapple Paradise']);
   assert.deepEqual(info.products[0].images, ['https://sodaco.com/cdn/shop/files/Apple_1B_420x.jpg?v=1'], 'one image per photo, not the pineapple');
+});
+
+test('isPublicUrl blocks local, internal, raw-IP and ported targets', () => {
+  for (const bad of ['http://localhost/', 'https://localhost./', 'https://a.localhost/', 'https://printer.local./', 'https://db.internal/',
+    'http://127.0.0.1/', 'http://169.254.169.254/', 'http://[::1]/', 'https://example.com:6379/', 'https://user:pw@example.com/', 'ftp://example.com/'])
+    assert.ok(!isPublicUrl(new URL(bad)), bad);
+  assert.ok(isPublicUrl(new URL('https://drinkwildwonder.com/')));
+});
+
+test('parseSite stays fast on hostile input (bounded regexes)', () => {
+  for (const unit of ['"//a/cdn/shop/', '<meta ', '<title ']) {
+    const t = performance.now();
+    parseSite(unit.repeat(Math.ceil(512_000 / unit.length)), 'x.com', 'https://x.com');
+    assert.ok(performance.now() - t < 2000, `${unit} took too long`);
+  }
+});
+
+test('editing a handle after the niche step keeps the chosen niche and picks', () => {
+  let s = finishSiteRead(editSite(at('site'), 'drinkwildwonder.com'), WILD_WONDER);
+  s = { ...s, step: STEPS.indexOf('socials'), beliefs: ['gut'] };
+  s = editLink(s, 'tiktok', '@somethingelse');
+  assert.equal(s.niche, 'drinks');
+  assert.deepEqual(s.beliefs, ['gut']);
+});
+
+test('video picks from a deselected competitor no longer count', () => {
+  let s = withNiche(at('videos'), 'drinks');
+  s = { ...s, videos: [competitorVideos(s)[0].id] };
+  assert.ok(canContinue(s));
+  assert.ok(!canContinue({ ...s, comps: [] }));
 });

@@ -81,15 +81,18 @@ export function withNiche(s: State, id: NicheId | null): State {
   if (s.niche === id) return s;
   const keep = s.comps.filter(h => s.custom.includes(h));
   // Drinks: the example client's main competitor (Bloom) is pre-selected.
-  const comps = id === 'drinks' ? [...keep, DRINKS.competitors[0].h] : keep;
+  const comps = id === 'drinks' ? [...new Set([...keep, DRINKS.competitors[0].h])] : keep;
   return { ...s, niche: id, comps, beliefs: [], videos: [] };
 }
 
-/** Re-runs detection and, unless the user chose a niche, selects it with its first two genres. */
+/**
+ * Re-runs detection and selects the niche with its first two genres, unless the user chose one
+ * or is already past the niche step (editing a handle later must not reset their answers).
+ */
 export function withSuggestion(s: State): State {
   const suggested = detectNiche(s);
   s = { ...s, suggested };
-  if (s.nicheManual) return s;
+  if (s.nicheManual || s.step > STEPS.indexOf('niche')) return s;
   s = withNiche(s, suggested);
   return { ...s, genres: nicheById(suggested)?.g.slice(0, 2) ?? [] };
 }
@@ -151,7 +154,7 @@ export function canContinue(s: State): boolean {
     case 'socials': return validSocials(s).length > 0;
     case 'comps': return s.comps.length > 0;
     case 'beliefs': return s.beliefs.length + s.own.length > 0;
-    case 'videos': return s.videos.length > 0;
+    case 'videos': return pickedVideos(s).length > 0; // ids can go stale when a competitor is deselected
     default: return true;
   }
 }

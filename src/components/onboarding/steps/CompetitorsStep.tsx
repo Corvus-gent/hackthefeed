@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState } from 'react';
 import { PALETTE, type Competitor } from '@/lib/onboarding/data';
 import { competitorsFor, parseHandle, toggle } from '@/lib/onboarding/state';
 import type { StepProps } from '../Onboarding';
@@ -49,18 +49,16 @@ export default function CompetitorsStep({ s, set }: StepProps) {
 
 function CompetitorCard({ c, on, custom, onToggle, onRemove }: { c: Competitor; on: boolean; custom: boolean; onToggle: () => void; onRemove: () => void }) {
   const initials = c.n.replace('@', '').split(/[\s.]+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const key = (e: KeyboardEvent) => { if (e.target === e.currentTarget && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); onToggle(); } };
   return (
-    <div role="checkbox" aria-checked={on} tabIndex={0} onClick={onToggle} onKeyDown={key} style={{ ['--c' as string]: c.c }}
-      className={cx('group relative flex min-h-[248px] w-[176px] shrink-0 cursor-pointer snap-start flex-col items-center gap-0.5 overflow-hidden rounded-[10px] border bg-surface px-3.5 pb-3.5 text-center transition hover:-translate-y-0.5 max-sm:w-[150px]',
+    // The Remove button is a sibling of the checkbox, not inside it, so screen readers expose both.
+    <div className="relative w-[176px] shrink-0 snap-start max-sm:w-[150px]" style={{ ['--c' as string]: c.c }}>
+    <button type="button" role="checkbox" aria-checked={on} aria-label={`${c.n}${c.site ? `, ${c.site}` : ''}`} onClick={onToggle}
+      className={cx('group relative flex min-h-[248px] w-full flex-col items-center gap-0.5 overflow-hidden rounded-[10px] border bg-surface px-3.5 pb-3.5 text-center transition hover:-translate-y-0.5',
         on ? 'border-accent bg-accent-soft shadow-[inset_0_0_0_1px_var(--color-accent),0_0_0_3px_var(--color-accent-ring)]' : 'border-line hover:border-accent/45')}>
       <span className="absolute inset-x-0 top-0 h-[84px] bg-[linear-gradient(160deg,var(--c),color-mix(in_srgb,var(--c)_45%,white))]">
         {c.img && <RemoteImage src={c.img[0]} alt="" className="size-full object-cover" />}
       </span>
-      {custom
-        ? <button type="button" aria-label={`Remove ${c.n}`} onClick={e => { e.stopPropagation(); onRemove(); }}
-            className="absolute top-2 right-2 z-10 grid size-[26px] place-items-center rounded-lg border border-line bg-surface text-ink-2"><Icon name="x" size={14} /></button>
-        : <CheckCircle on={on} onImage className="absolute top-2 right-2 z-10" />}
+      {!custom && <CheckCircle on={on} onImage className="absolute top-2 right-2 z-10" />}
       <span className="relative mt-[50px] grid size-[68px] shrink-0 place-items-center overflow-hidden rounded-full border-[3px] border-surface bg-[var(--c)] text-xl font-medium text-white group-aria-checked:border-accent-soft">
         {c.img ? <RemoteImage src={c.img[0]} alt="" className="size-full object-cover" /> : initials}
       </span>
@@ -73,6 +71,11 @@ function CompetitorCard({ c, on, custom, onToggle, onRemove }: { c: Competitor; 
           <span className="line-clamp-3 block text-[12px] leading-snug text-ink-2">{c.product ?? 'Stats arrive after the first scan'}</span>
         )}
       </span>
+    </button>
+    {custom && (
+      <button type="button" aria-label={`Remove ${c.n}`} onClick={onRemove}
+        className="absolute top-2 right-2 z-10 grid size-[26px] place-items-center rounded-lg border border-line bg-surface text-ink-2"><Icon name="x" size={14} /></button>
+    )}
     </div>
   );
 }

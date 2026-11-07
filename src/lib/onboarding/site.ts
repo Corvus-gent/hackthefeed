@@ -8,8 +8,23 @@ const decode = (s: string) => s
   .replace(/&#39;|&#x27;|&apos;/g, '’').replace(/&quot;/g, '"').replace(/&amp;/g, '&')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
 
+/**
+ * True for http(s) URLs on public-looking hostnames: no ports, credentials, raw IPs or local names.
+ * ponytail: hostname check only, no DNS resolution, so a public name that points at a private IP
+ * still passes; resolve and check the IP (or fetch through an egress proxy) before production use.
+ */
+export function isPublicUrl(url: URL) {
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+  if (url.port || url.username || url.password) return false;
+  const h = url.hostname.toLowerCase().replace(/\.$/, '');
+  if (!h.includes('.') || h === 'localhost' || /\.(localhost|local|internal|lan|home|corp)$/.test(h)) return false;
+  if (/^[\d.]+$/.test(h) || h.includes(':') || h.startsWith('[')) return false; // raw IPv4/IPv6
+  return true;
+}
+
+// All patterns below run on untrusted HTML, so every repeat has an upper bound (no catastrophic backtracking).
 function meta(html: string, key: string) {
-  const tag = html.match(new RegExp(`<meta[^>]+(?:name|property)=["']${key}["'][^>]*>`, 'i'))?.[0];
+  const tag = html.match(new RegExp(`<meta[^>]{0,500}(?:name|property)=["']${key}["'][^>]{0,500}>`, 'i'))?.[0];
   const content = tag?.match(/content=["']([^"']*)["']/i)?.[1];
   return content ? decode(content) : '';
 }
@@ -24,7 +39,7 @@ const titleCase = (handle: string) => handle.split('-').map(w => w[0].toUpperCas
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export function parseSite(html: string, host: string, origin: string, maxProducts = 24): SiteInfo {
-  const title = meta(html, 'og:title') || decode(html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? '');
+  const title = meta(html, 'og:title') || decode(html.match(/<title[^>]{0,200}>([^<]{0,300})<\/title>/i)?.[1] ?? '');
   const description = meta(html, 'description') || meta(html, 'og:description');
 
   const socials: SiteInfo['socials'] = {};
@@ -33,8 +48,8 @@ export function parseSite(html: string, host: string, origin: string, maxProduct
     if (m) socials[key] = '@' + m[1].replace(/\.$/, '');
   }
 
-  const handles = [...new Set([...html.matchAll(/href=["'](?:https?:\/\/[^"']+)?\/products\/([a-z0-9-]+)/gi)].map(m => m[1].toLowerCase()))];
-  const images = [...new Set([...html.matchAll(/((?:https?:)?\/\/[^"'\s,]+?\/(?:cdn\/shop|s\/files)\/[^"'\s,]+?\.(?:png|jpe?g|webp)(?:\?[^"'\s,]*)?)/gi)]
+  const handles = [...new Set([...html.matchAll(/href=["'](?:https?:\/\/[^"'/]{1,200})?\/products\/([a-z0-9-]{1,100})/gi)].map(m => m[1].toLowerCase()))];
+  const images = [...new Set([...html.matchAll(/((?:https?:)?\/\/[^"'\s,]{1,200}?\/(?:cdn\/shop|s\/files)\/[^"'\s,]{1,200}?\.(?:png|jpe?g|webp)(?:\?[^"'\s,]{0,200})?)/gi)]
     .map(m => m[1].replace(/&amp;/g, '&'))
     .map(u => (u.startsWith('//') ? 'https:' + u : u)))];
 

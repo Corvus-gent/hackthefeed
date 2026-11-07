@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import {
-  canContinue, finishSiteRead, initialState, SECTIONS, SECTION_OF, siteFailed, SKIPPABLE, STEPS,
+  canContinue, finishSiteRead, initialState, SECTIONS, SECTION_OF, siteFailed, SKIPPABLE, STEPS, withAutofill,
   type State, type StepId,
 } from '@/lib/onboarding/state';
 import type { SiteInfo } from '@/lib/onboarding/data';
@@ -86,7 +86,7 @@ export default function Onboarding() {
   };
   const back = () => (id === 'done' ? set(initialState()) : set(p => ({ ...p, step: Math.max(0, p.step - 1) })));
   const skip = () => set(p => (id === 'socials'
-    ? { ...p, step: p.step + 1, links: { tiktok: '', instagram: '', youtube: '' }, found: [] }
+    ? withAutofill({ ...p, step: p.step + 1, links: { tiktok: '', instagram: '', youtube: '' }, found: [] })
     : { ...p, step: p.step + 1 }));
 
   const section = SECTION_OF[id];
