@@ -1,0 +1,4 @@
+# Corvus hosting
+feat/onboarding is an exact fast-forward mirror of upstream. This default branch owns only corvus/ and the sync workflow. Never merge hosting commits into the mirror.
+Vercel builds feat/onboarding and downloads corvus/install.mjs as a fail-closed build overlay. Generation and retry reserve clip counts atomically in Redis (20/day globally, 6/day per daily-salted IP). No key: coming soon. Missing Redis: no generation. SDK retries disabled; requested expensive model overrides ignored. Failed attempts still consume allowance. Cron requests every 5 minutes, but GitHub may delay scheduled runs; this is not a real-time guarantee.
+No GMI or Oriane credentials are bundled. Upstream onboarding currently uses Bloom example competitor data and prototype steps. It must remain labelled early beta.
