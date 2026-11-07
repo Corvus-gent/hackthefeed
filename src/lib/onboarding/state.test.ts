@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { WILD_WONDER } from './data.ts';
 import { isPublicUrl, parseSite } from './site.ts';
+import { titleFrom, toViralVideo, type OrianeResult } from './viral.ts';
 import {
-  canContinue, competitorVideos, detectNiche, editLink, editSite, editWhat, finishSiteRead,
+  canContinue, detectNiche, editLink, editSite, editWhat, finishSiteRead,
   initialState, parseHandle, rankedVideos, STEPS, validLink, withNiche, type State,
 } from './state.ts';
 
@@ -69,11 +70,9 @@ test('switching niche clears old picks but keeps hand-added competitors', () => 
   assert.deepEqual(s.videos, []);
 });
 
-test('competitor view shows the selected competitor’s videos with their product shots', () => {
-  const s = withNiche(at('videos'), 'drinks');
-  const videos = competitorVideos(s);
-  assert.ok(videos.length > 0 && videos.every(v => v.from === 'bloomnu.com' && v.img));
-  assert.deepEqual(competitorVideos({ ...s, comps: [] }), []);
+test('viral video titles drop hashtags, mentions and the reply prefix', () => {
+  assert.equal(titleFrom('Replying to @sam Recovering from vacation with @Bloom Nutrition  #LawnCare', '@x'), 'Recovering from vacation with Bloom');
+  assert.equal(titleFrom('#fyp #bloompartner', '@rosanna'), '@rosanna');
 });
 
 test('videos matching the user’s beliefs come first', () => {
@@ -130,9 +129,10 @@ test('editing a handle after the niche step keeps the chosen niche and picks', (
   assert.deepEqual(s.beliefs, ['gut']);
 });
 
-test('video picks from a deselected competitor no longer count', () => {
-  let s = withNiche(at('videos'), 'drinks');
-  s = { ...s, videos: [competitorVideos(s)[0].id] };
+test('a picked Oriane video only counts while it is in the loaded results', () => {
+  const video = toViralVideo({ id: 'cnt_1', platform: 'tiktok', platformId: '42', profileHandle: 'ej', publishedAt: '2026-09-11T00:00:00Z' } satisfies OrianeResult);
+  const s = { ...withNiche(at('videos'), 'drinks'), viral: [video], videos: [video.id] };
+  assert.equal(video.url, 'https://www.tiktok.com/@ej/video/42');
   assert.ok(canContinue(s));
-  assert.ok(!canContinue({ ...s, comps: [] }));
+  assert.ok(!canContinue({ ...s, viral: [] }));
 });

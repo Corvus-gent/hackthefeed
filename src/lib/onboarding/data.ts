@@ -20,8 +20,6 @@ export type Belief = { id: string; s: string; t: string; vs: string; ex: string 
 export type Format = {
   id: string; t: string; cap: string; handle: string; dur: string; c: [string, string]; icon: IconName;
   views: string; watch: number; posts: number; growth: number; comps: number; fits: string[]; s: number[];
-  img?: string; // thumbnail image (competitor videos use their product shots until real frames come from Oriane)
-  from?: string; // competitor this video belongs to
 };
 export type Product = { id: string; title: string; url?: string; images: string[]; selected: boolean; imported: boolean };
 export type SiteInfo = {
@@ -211,14 +209,6 @@ export const DRINKS = {
     ['30-day test', '30 days of one can a day', 'chart', ['gut']],
   ] as [string, string, IconName, string[]][],
 };
-
-// Kinds of videos shown for a competitor until Oriane returns their real top posts: [name, caption, icon, belief ids]
-export const COMPETITOR_VIDEO_IDEAS: [string, string, IconName, string[]][] = [
-  ['Flavour ranking', 'Ranking every flavour', 'grid', ['taste', 'story']],
-  ['First-sip reaction', 'First sip, honest reaction', 'chat', ['taste']],
-  ['Gym bag restock', 'Restocking my gym bag', 'dumbbell', ['nocrash']],
-  ['What I drink in a day', 'Everything I drink in a day', 'can', ['gut']],
-];
 
 // Saved snapshot of drinkwildwonder.com (the example client), used when the live site rate-limits us.
 const WW = 'https://drinkwildwonder.com/cdn/shop/files/';

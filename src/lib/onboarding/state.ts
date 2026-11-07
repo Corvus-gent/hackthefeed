@@ -1,9 +1,10 @@
 // Onboarding state and the pure rules behind it. No React here, so it can be unit tested.
 import {
-  COMPETITOR_VIDEO_IDEAS, DRINKS, FORMAT_COLORS, GENERIC_WHAT, NICHES, NICHE_HINTS, NICHE_SETS,
+  DRINKS, FORMAT_COLORS, GENERIC_WHAT, NICHES, NICHE_HINTS, NICHE_SETS,
   NIGHTLIFE_BELIEFS, NIGHTLIFE_COMPETITORS, NIGHTLIFE_FORMATS, PALETTE, SOCIALS,
   type Belief, type Competitor, type Format, type IconName, type NicheId, type Product, type SiteInfo, type SocialKey,
 } from './data.ts';
+import type { ViralVideo } from './viral.ts';
 
 export type Role = 'creator' | 'brand' | 'agency';
 export type VideoView = 'competitors' | 'niche';
@@ -30,6 +31,8 @@ export type State = {
   own: string[];
   videoView: VideoView;
   videos: string[];
+  viral: ViralVideo[]; // Bloom's real top videos from Oriane, shown in the competitor view
+  viralSt: 'loading' | 'done' | 'error';
 };
 
 export const STEPS = ['role', 'site', 'products', 'niche', 'socials', 'comps', 'beliefs', 'videos', 'done'] as const;
@@ -43,6 +46,7 @@ export const initialState = (): State => ({
   links: { tiktok: '', instagram: '', youtube: '' }, found: [], products: [],
   suggested: null, nicheManual: false, niche: null, genres: [],
   comps: [], custom: [], beliefs: [], own: [], videoView: 'competitors', videos: [],
+  viral: [], viralSt: 'loading',
 });
 
 export const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -154,7 +158,7 @@ export function canContinue(s: State): boolean {
     case 'socials': return validSocials(s).length > 0;
     case 'comps': return s.comps.length > 0;
     case 'beliefs': return s.beliefs.length + s.own.length > 0;
-    case 'videos': return pickedVideos(s).length > 0; // ids can go stale when a competitor is deselected
+    case 'videos': return pickedVideos(s).length > 0; // ids can go stale when the niche or the Oriane results change
     default: return true;
   }
 }
@@ -193,24 +197,11 @@ export function nicheFormats(niche: NicheId | null): Format[] {
   return set.f.map(([t, cap, icon, fits], i) => sampleFormat(`n${i}`, t, cap, icon, fits, '@' + set.c[i % set.c.length][0], i));
 }
 
-/**
- * Focused view: top videos from the selected competitors.
- * ponytail: placeholder videos built from each competitor's product shots; replace with Oriane's
- * top posts per account (call it from a route handler so the API key stays on the server).
- */
-export function competitorVideos(s: State): Format[] {
-  const list = competitorsFor(s.niche).filter(c => s.comps.includes(c.h));
-  const custom = s.custom.filter(h => s.comps.includes(h)).map((h, i): Competitor => ({ h, n: '@' + h, c: PALETTE[i % 4] }));
-  return [...list, ...custom].flatMap((c, ci) => COMPETITOR_VIDEO_IDEAS.slice(0, c.img ? 4 : 2).map(([t, cap, icon, fits], i) =>
-    sampleFormat(`c-${c.h}-${i}`, t, cap, icon, fits, c.n, ci * 4 + i, { img: c.img?.[i % c.img.length], from: c.h, comps: 0 })));
-}
-
 export type RankedVideo = Format & { fit: string[] };
-/** Videos for the current view, with the user's matching beliefs; matches first. */
+/** Whole-niche formats with the user's matching beliefs; matches first. */
 export function rankedVideos(s: State): RankedVideo[] {
   const beliefs = beliefsFor(s.niche);
-  const list = s.videoView === 'competitors' ? competitorVideos(s) : nicheFormats(s.niche);
-  return list
+  return nicheFormats(s.niche)
     .map(v => ({ ...v, fit: beliefs.filter(b => v.fits.includes(b.id) && s.beliefs.includes(b.id)).map(b => b.s) }))
     .sort((a, b) => b.fit.length - a.fit.length || b.growth - a.growth);
 }
@@ -223,4 +214,4 @@ export const exampleHooks = (s: State): [hook: string, from: string][] => [
 ].slice(0, 3);
 
 /** Every video the user picked, from either view (picks survive switching views). */
-export const pickedVideos = (s: State) => [...competitorVideos(s), ...nicheFormats(s.niche)].filter(v => s.videos.includes(v.id));
+export const pickedVideos = (s: State) => [...s.viral, ...nicheFormats(s.niche)].filter(v => s.videos.includes(v.id));

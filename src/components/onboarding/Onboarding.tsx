@@ -6,6 +6,7 @@ import {
   type State, type StepId,
 } from '@/lib/onboarding/state';
 import type { SiteInfo } from '@/lib/onboarding/data';
+import type { ViralVideo } from '@/lib/onboarding/viral';
 import { Icon } from './icons';
 import { btn, cx } from './ui';
 import RoleStep from './steps/RoleStep';
@@ -65,6 +66,23 @@ export default function Onboarding() {
     }, 500);
     return () => { clearTimeout(timer); ctrl.abort(); };
   }, [s.siteSt, s.site]);
+
+  // Load Bloom's real top videos from Oriane up front, so the videos step is ready when the user gets there.
+  useEffect(() => {
+    if (s.viralSt !== 'loading') return;
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch('/api/onboarding/videos', { signal: ctrl.signal });
+        const data: { videos: ViralVideo[] } | { error: string } = await res.json();
+        if (!res.ok || 'error' in data) throw new Error('error' in data ? data.error : `HTTP ${res.status}`);
+        set(p => ({ ...p, viral: data.videos, viralSt: 'done' }));
+      } catch {
+        if (!ctrl.signal.aborted) set(p => ({ ...p, viralSt: 'error' }));
+      }
+    })();
+    return () => ctrl.abort();
+  }, [s.viralSt]);
 
   // Move focus to the new question so keyboard and screen-reader users land in the right place.
   useEffect(() => {
